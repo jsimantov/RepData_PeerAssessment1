@@ -1,25 +1,192 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
 output: 
-  html_document:
-    keep_md: true
+html_document:
+keep_md: true
 ---
 
 
-## Loading and preprocessing the data
+## Loading and preprocessing the data  
+
+Loading required libraries  
+
+
+```{r,echo=TRUE}
+library(ggplot2)
+library(dplyr)
+library(lattice)
+library(png)
+```
+First Step: unzip the data file if it has not been already unzipped  
+
+```{r,echo=TRUE}
+
+if (!file.exists("activity.csv"))
+  unzip ("activity.zip")
+
+
+activityData <- read.csv("activity.csv")
+print ("File loaded into R")
+```
+
+
+We'll have a look to see what we're dealing with...
+```{r,echo=TRUE}
+names(activityData)
+head(activityData)
+```
+## Distribution of the total number of steps per day 
+
+Null values will be ignored in this calculation  
+The chart graphic file is stored in folder /figure
+
+```{r,echo=TRUE}
+stepsPerDay <- aggregate(steps~date, activityData,sum,na.rm=TRUE)
+plotFile <- "figure/totalStepsPerDay.png"
+png (plotFile)
+hist(stepsPerDay$steps,col="blue", xlab="Number of Steps",main="Steps Per Day")
+dev.off()
+img <- readPNG(plotFile)
+grid::grid.raster(img)
+
+```
+
+## What is mean total number of steps taken per day?  
+
+
+```{r,echo=TRUE}
+meanStepsPerDay <- mean(stepsPerDay$steps)
+paste("Mean Steps per day: ", as.integer(meanStepsPerDay))
+```
+
+## What is median total number of steps taken per day?  
+```{r,echo=TRUE}
+medianStepsPerDay <- median(stepsPerDay$steps)
+paste("Median steps per day: ",as.integer(medianStepsPerDay))
+```
+
+## What is the average daily activity pattern?  
+
+```{r,echo=TRUE}
+StepsPerInterval <- tapply(activityData$steps,activityData$interval,mean,na.rm=TRUE)
+plotFile <- "figure/stepsvsinterval.png"
+png(plotFile)
+plot(as.numeric(names(StepsPerInterval)),StepsPerInterval,xlab="5-minute Interval",ylab="Average Number of Steps in Interval",
+     main="Average Daily Ativity Pattern",type = "l")
+
+dev.off()
+img <- readPNG(plotFile)
+grid::grid.raster(img)
+```
+
+##Interval Containing the maximum number of steps
+```{r,echo=TRUE}
+maxInterval <- names(sort(StepsPerInterval, decreasing = TRUE)[1])
+maxSteps <- sort(StepsPerInterval, decreasing = TRUE)[1]
+paste("Interval with the maximum number of steps: ",maxInterval)
+paste("Number of Steps: ",maxSteps)
+
+```
+
+
+# Imputing missing values
+#
+Check if any of the columns in the activity dataset has missing values  
+
+```{r,echo=TRUE}
+paste("Number of missing Values in column steps: ",sum(is.na(activityData$steps)))
+paste("Number of missing values in column interval: ",sum(is.na(activityData$interval)))
+paste ("Number of missing Values in column date: ",sum(is.na(activityData$date)))
+```
+A new dataframe is created from the original activity Data  
+Al subsequent calculations will be carried out in the new dataframe  
+The initial activity dataset is kept for reference and archiving purposes  
+And, in order to repeat the research if something goes wrong!  
+
+```{r,echo=TRUE}
+newActivitySet <- activityData
+mvIndex <- which(is.na(newActivitySet$steps))
+mviLen <- length(mvIndex)
+stepAverage <- with(newActivitySet,tapply(steps,date,mean,na.rm=TRUE))
+na <- mean(stepAverage,na.rm=TRUE)
+for (i in 1:mviLen)
+{
+  newActivitySet[mvIndex[i],1] <- na
+}
+```
+
+Check if the procedure worked by calculating again the number of missing values in the new dataframe  
+
+```{r,echo=TRUE}
+paste("Number of Missing Values after Corrections:" , sum(is.na(newActivitySet$steps)))
+```
+  
+If this number is zero, the missing values have been replaced correctly  
+
+Head of the new dataframe after corrections 
+
+```{r,echo=TRUE}
+head(newActivitySet)
+```
+  
+And the histogram of total steps in each day using the new dataframe  
+```{r,echo=TRUE}
+correctedSteps<-with(newActivitySet,tapply(steps,date,sum))
+plotFile <- "figure/stepsMisValuesImp.png"
+png(plotFile)
+hist(correctedSteps,col = "red",xlab = "Total Number of Steps",ylab = "Frequency",main = "Distribution of daily total steps (Corrected for Missing Data)")
+dev.off()
+img <- readPNG(plotFile)
+grid::grid.raster(img)
+```
+  
+Values of mean and median number of steps, calculated after correcting for missing values  
+
+```{r,echo=TRUE}
+paste("New Mean Value: ", newMeanValue <- mean(correctedSteps))
+paste("New Median Value: ", newMedianValue <- median(correctedSteps))
+
+```
+Apparently, the impact of missing step data on the final dataset is negligible; this may also be due to  
+the specific data correction strategy used; a different method (i.e. inserting median instead of mean value) 
+may yield distinctly different results  
 
 
 
-## What is mean total number of steps taken per day?
+## Are there differences in activity patterns between weekdays and weekends?  
+
+A new factor variable is created in the dataset and calculated from the 'Day' component of the date column  
+This variable will have the values for 'weekend' when 'Day' is Saturday or Sunday, and 'weekday' for all other values   
+```{r,echo=TRUE}
+newActivitySet$day <- weekdays(as.Date(strptime(newActivitySet$date,format="%Y-%m-%d")))
+for (i in 1:nrow(newActivitySet)) {
+    if (newActivitySet[i,]$day %in% c("Saturday","Sunday")) {
+        newActivitySet[i,]$day<-"weekend"
+    }
+    else{
+        newActivitySet[i,]$day<-"weekday"
+    }
+}
+noStepsByDay <- aggregate(newActivitySet$steps ~ newActivitySet$interval + newActivitySet$day, newActivitySet, mean)
+```
+
+Finally, the following panel plot compares the number of steps taken during the weekdays to the number of steps taken during weekend days  
 
 
+```{r,echo=TRUE}
 
-## What is the average daily activity pattern?
+plotFile <- "figure/panelplot.png"
+png(plotFile)
+names(noStepsByDay)<- c("interval","day","steps")
+xyplot(steps ~ interval | day, noStepsByDay, type = "l", layout=c(1,2),xlab="Five-minute interval",ylab="Number of Steps")
+dev.off()
+img <- readPNG(plotFile)
+grid::grid.raster(img)
+
+```  
+
+## Interpretation of the final plot  
+
+A significant difference is shown in the activity pattern between weekdays and weekend. The peak in number of steps during the early hours and the late hours of the weekdays can be attributed to people being professionally active, while the regular pattern observed during the weekend can be assigned to regular home activities during the weekend
 
 
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
